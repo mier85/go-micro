@@ -36,8 +36,3 @@ func (c *clientWrapper) Stream(ctx context.Context, req client.Request, opts ...
 	ctx = c.setHeaders(ctx)
 	return c.Client.Stream(ctx, req, opts...)
 }
-
-func (c *clientWrapper) Publish(ctx context.Context, p client.Message, opts ...client.PublishOption) error {
-	ctx = c.setHeaders(ctx)
-	return c.Client.Publish(ctx, p, opts...)
-}

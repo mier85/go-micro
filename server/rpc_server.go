@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/micro/go-micro/broker"
 	"github.com/micro/go-micro/codec"
 	"github.com/micro/go-micro/metadata"
 	"github.com/micro/go-micro/registry"
@@ -26,7 +25,6 @@ type rpcServer struct {
 	sync.RWMutex
 	opts        Options
 	handlers    map[string]Handler
-	subscribers map[*subscriber][]broker.Subscriber
 	// used for first registration
 	registered bool
 	// graceful exit
@@ -39,7 +37,6 @@ func newRpcServer(opts ...Option) Server {
 		opts:        options,
 		router:      DefaultRouter,
 		handlers:    make(map[string]Handler),
-		subscribers: make(map[*subscriber][]broker.Subscriber),
 		exit:        make(chan chan error),
 		wg:          wait(options.Context),
 	}
@@ -227,33 +224,6 @@ func (s *rpcServer) Handle(h Handler) error {
 	return nil
 }
 
-func (s *rpcServer) NewSubscriber(topic string, sb interface{}, opts ...SubscriberOption) Subscriber {
-	return newSubscriber(topic, sb, opts...)
-}
-
-func (s *rpcServer) Subscribe(sb Subscriber) error {
-	sub, ok := sb.(*subscriber)
-	if !ok {
-		return fmt.Errorf("invalid subscriber: expected *subscriber")
-	}
-	if len(sub.handlers) == 0 {
-		return fmt.Errorf("invalid subscriber: no handler functions")
-	}
-
-	if err := validateSubscriber(sb); err != nil {
-		return err
-	}
-
-	s.Lock()
-	defer s.Unlock()
-	_, ok = s.subscribers[sub]
-	if ok {
-		return fmt.Errorf("subscriber %v already exists", s)
-	}
-	s.subscribers[sub] = nil
-	return nil
-}
-
 func (s *rpcServer) Register() error {
 	// parse address for host, port
 	config := s.Options()
@@ -297,7 +267,6 @@ func (s *rpcServer) Register() error {
 	}
 
 	node.Metadata["transport"] = config.Transport.String()
-	node.Metadata["broker"] = config.Broker.String()
 	node.Metadata["server"] = s.String()
 	node.Metadata["registry"] = config.Registry.String()
 	node.Metadata["protocol"] = "mucp"
@@ -313,23 +282,10 @@ func (s *rpcServer) Register() error {
 	}
 	sort.Strings(handlerList)
 
-	var subscriberList []*subscriber
-	for e := range s.subscribers {
-		// Only advertise non internal subscribers
-		if !e.Options().Internal {
-			subscriberList = append(subscriberList, e)
-		}
-	}
-	sort.Slice(subscriberList, func(i, j int) bool {
-		return subscriberList[i].topic > subscriberList[j].topic
-	})
 
 	var endpoints []*registry.Endpoint
 	for _, n := range handlerList {
 		endpoints = append(endpoints, s.handlers[n].Endpoints()...)
-	}
-	for _, e := range subscriberList {
-		endpoints = append(endpoints, e.Endpoints()...)
 	}
 	s.RUnlock()
 
@@ -364,28 +320,6 @@ func (s *rpcServer) Register() error {
 	defer s.Unlock()
 
 	s.registered = true
-
-	for sb, _ := range s.subscribers {
-		handler := s.createSubHandler(sb, s.opts)
-		var opts []broker.SubscribeOption
-		if queue := sb.Options().Queue; len(queue) > 0 {
-			opts = append(opts, broker.Queue(queue))
-		}
-
-		if cx := sb.Options().Context; cx != nil {
-			opts = append(opts, broker.SubscribeContext(cx))
-		}
-
-		if !sb.Options().AutoAck {
-			opts = append(opts, broker.DisableAutoAck())
-		}
-
-		sub, err := config.Broker.Subscribe(sb.Topic(), handler, opts...)
-		if err != nil {
-			return err
-		}
-		s.subscribers[sb] = []broker.Subscriber{sub}
-	}
 
 	return nil
 }
@@ -443,14 +377,6 @@ func (s *rpcServer) Deregister() error {
 
 	s.registered = false
 
-	for sb, subs := range s.subscribers {
-		for _, sub := range subs {
-			log.Logf("Unsubscribing from topic: %s", sub.Topic())
-			sub.Unsubscribe()
-		}
-		s.subscribers[sb] = nil
-	}
-
 	s.Unlock()
 	return nil
 }
@@ -472,13 +398,6 @@ func (s *rpcServer) Start() error {
 	addr := s.opts.Address
 	s.opts.Address = ts.Addr()
 	s.Unlock()
-
-	// connect to the broker
-	if err := config.Broker.Connect(); err != nil {
-		return err
-	}
-
-	log.Logf("Broker [%s] Connected to %s", config.Broker.String(), config.Broker.Address())
 
 	// use RegisterCheck func before register
 	if err = s.opts.RegisterCheck(s.opts.Context); err != nil {
@@ -569,9 +488,6 @@ func (s *rpcServer) Start() error {
 
 		// close transport listener
 		ch <- ts.Close()
-
-		// disconnect the broker
-		config.Broker.Disconnect()
 
 		// swap back address
 		s.Lock()

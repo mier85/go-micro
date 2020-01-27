@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 
-	"github.com/micro/go-micro/broker"
 	"github.com/micro/go-micro/client"
 	"github.com/micro/go-micro/registry"
 	"github.com/micro/go-micro/selector"
@@ -18,14 +17,12 @@ type Options struct {
 	Version     string
 
 	// We need pointers to things so we can swap them out if needed.
-	Broker    *broker.Broker
 	Registry  *registry.Registry
 	Selector  *selector.Selector
 	Transport *transport.Transport
 	Client    *client.Client
 	Server    *server.Server
 
-	Brokers    map[string]func(...broker.Option) broker.Broker
 	Clients    map[string]func(...client.Option) client.Client
 	Registries map[string]func(...registry.Option) registry.Registry
 	Selectors  map[string]func(...selector.Option) selector.Selector
@@ -55,12 +52,6 @@ func Description(d string) Option {
 func Version(v string) Option {
 	return func(o *Options) {
 		o.Version = v
-	}
-}
-
-func Broker(b *broker.Broker) Option {
-	return func(o *Options) {
-		o.Broker = b
 	}
 }
 
@@ -94,12 +85,6 @@ func Server(s *server.Server) Option {
 	}
 }
 
-// New broker func
-func NewBroker(name string, b func(...broker.Option) broker.Broker) Option {
-	return func(o *Options) {
-		o.Brokers[name] = b
-	}
-}
 
 // New client func
 func NewClient(name string, b func(...client.Option) client.Client) Option {

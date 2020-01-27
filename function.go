@@ -73,9 +73,3 @@ func (f *function) Handle(v interface{}) error {
 		f.Service.Server().NewHandler(v),
 	)
 }
-
-func (f *function) Subscribe(topic string, v interface{}) error {
-	return f.Service.Server().Subscribe(
-		f.Service.Server().NewSubscriber(topic, v),
-	)
-}

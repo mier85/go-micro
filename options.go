@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/micro/cli"
-	"github.com/micro/go-micro/broker"
 	"github.com/micro/go-micro/client"
 	"github.com/micro/go-micro/cmd"
 	"github.com/micro/go-micro/registry"
@@ -15,7 +14,6 @@ import (
 )
 
 type Options struct {
-	Broker    broker.Broker
 	Cmd       cmd.Cmd
 	Client    client.Client
 	Server    server.Server
@@ -35,7 +33,6 @@ type Options struct {
 
 func newOptions(opts ...Option) Options {
 	opt := Options{
-		Broker:    broker.DefaultBroker,
 		Cmd:       cmd.DefaultCmd,
 		Client:    client.DefaultClient,
 		Server:    server.DefaultServer,
@@ -51,14 +48,6 @@ func newOptions(opts ...Option) Options {
 	return opt
 }
 
-func Broker(b broker.Broker) Option {
-	return func(o *Options) {
-		o.Broker = b
-		// Update Client and Server
-		o.Client.Init(client.Broker(b))
-		o.Server.Init(server.Broker(b))
-	}
-}
 
 func Cmd(c cmd.Cmd) Option {
 	return func(o *Options) {
@@ -97,8 +86,6 @@ func Registry(r registry.Registry) Option {
 		o.Server.Init(server.Registry(r))
 		// Update Selector
 		o.Client.Options().Selector.Init(selector.Registry(r))
-		// Update Broker
-		o.Broker.Init(broker.Registry(r))
 	}
 }
 

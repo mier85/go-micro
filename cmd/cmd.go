@@ -14,11 +14,6 @@ import (
 	"github.com/micro/go-micro/server"
 	"github.com/micro/go-micro/util/log"
 
-	// brokers
-	"github.com/micro/go-micro/broker"
-	"github.com/micro/go-micro/broker/http"
-	"github.com/micro/go-micro/broker/memory"
-	"github.com/micro/go-micro/broker/nats"
 
 	// registries
 	"github.com/micro/go-micro/registry"
@@ -132,16 +127,6 @@ var (
 			Usage:  "A list of key-value pairs defining metadata. version=1.0.0",
 		},
 		cli.StringFlag{
-			Name:   "broker",
-			EnvVar: "MICRO_BROKER",
-			Usage:  "Broker for pub/sub. http, nats, rabbitmq",
-		},
-		cli.StringFlag{
-			Name:   "broker_address",
-			EnvVar: "MICRO_BROKER_ADDRESS",
-			Usage:  "Comma-separated list of broker addresses",
-		},
-		cli.StringFlag{
 			Name:   "registry",
 			EnvVar: "MICRO_REGISTRY",
 			Usage:  "Registry for discovery. consul, mdns",
@@ -166,12 +151,6 @@ var (
 			EnvVar: "MICRO_TRANSPORT_ADDRESS",
 			Usage:  "Comma-separated list of transport addresses",
 		},
-	}
-
-	DefaultBrokers = map[string]func(...broker.Option) broker.Broker{
-		"http":   http.NewBroker,
-		"memory": memory.NewBroker,
-		"nats":   nats.NewBroker,
 	}
 
 	DefaultClients = map[string]func(...client.Option) client.Client{
@@ -221,14 +200,12 @@ func init() {
 
 func newCmd(opts ...Option) Cmd {
 	options := Options{
-		Broker:    &broker.DefaultBroker,
 		Client:    &client.DefaultClient,
 		Registry:  &registry.DefaultRegistry,
 		Server:    &server.DefaultServer,
 		Selector:  &selector.DefaultSelector,
 		Transport: &transport.DefaultTransport,
 
-		Brokers:    DefaultBrokers,
 		Clients:    DefaultClients,
 		Registries: DefaultRegistries,
 		Selectors:  DefaultSelectors,
@@ -290,17 +267,6 @@ func (c *cmd) Before(ctx *cli.Context) error {
 		}
 	}
 
-	// Set the broker
-	if name := ctx.String("broker"); len(name) > 0 && (*c.opts.Broker).String() != name {
-		b, ok := c.opts.Brokers[name]
-		if !ok {
-			return fmt.Errorf("Broker %s not found", name)
-		}
-
-		*c.opts.Broker = b()
-		serverOpts = append(serverOpts, server.Broker(*c.opts.Broker))
-		clientOpts = append(clientOpts, client.Broker(*c.opts.Broker))
-	}
 
 	// Set the registry
 	if name := ctx.String("registry"); len(name) > 0 && (*c.opts.Registry).String() != name {
@@ -319,9 +285,6 @@ func (c *cmd) Before(ctx *cli.Context) error {
 
 		clientOpts = append(clientOpts, client.Selector(*c.opts.Selector))
 
-		if err := (*c.opts.Broker).Init(broker.Registry(*c.opts.Registry)); err != nil {
-			log.Fatalf("Error configuring broker: %v", err)
-		}
 	}
 
 	// Set the selector
@@ -363,12 +326,6 @@ func (c *cmd) Before(ctx *cli.Context) error {
 
 	if len(metadata) > 0 {
 		serverOpts = append(serverOpts, server.Metadata(metadata))
-	}
-
-	if len(ctx.String("broker_address")) > 0 {
-		if err := (*c.opts.Broker).Init(broker.Addrs(strings.Split(ctx.String("broker_address"), ",")...)); err != nil {
-			log.Fatalf("Error configuring broker: %v", err)
-		}
 	}
 
 	if len(ctx.String("registry_address")) > 0 {

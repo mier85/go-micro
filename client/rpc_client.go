@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -11,8 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/micro/go-micro/broker"
 	"github.com/micro/go-micro/codec"
 	"github.com/micro/go-micro/errors"
 	"github.com/micro/go-micro/metadata"
@@ -495,63 +492,6 @@ func (r *rpcClient) Stream(ctx context.Context, request Request, opts ...CallOpt
 	}
 
 	return nil, grr
-}
-
-func (r *rpcClient) Publish(ctx context.Context, msg Message, opts ...PublishOption) error {
-	options := PublishOptions{
-		Context: context.Background(),
-	}
-	for _, o := range opts {
-		o(&options)
-	}
-
-	md, ok := metadata.FromContext(ctx)
-	if !ok {
-		md = make(map[string]string)
-	}
-
-	id := uuid.New().String()
-	md["Content-Type"] = msg.ContentType()
-	md["Micro-Topic"] = msg.Topic()
-	md["Micro-Id"] = id
-
-	// set the topic
-	topic := msg.Topic()
-
-	// get proxy
-	if prx := os.Getenv("MICRO_PROXY"); len(prx) > 0 {
-		options.Exchange = prx
-	}
-
-	// get the exchange
-	if len(options.Exchange) > 0 {
-		topic = options.Exchange
-	}
-
-	// encode message body
-	cf, err := r.newCodec(msg.ContentType())
-	if err != nil {
-		return errors.InternalServerError("go.micro.client", err.Error())
-	}
-	b := &buffer{bytes.NewBuffer(nil)}
-	if err := cf(b).Write(&codec.Message{
-		Target: topic,
-		Type:   codec.Publication,
-		Header: map[string]string{
-			"Micro-Id":    id,
-			"Micro-Topic": msg.Topic(),
-		},
-	}, msg.Payload()); err != nil {
-		return errors.InternalServerError("go.micro.client", err.Error())
-	}
-	r.once.Do(func() {
-		r.opts.Broker.Connect()
-	})
-
-	return r.opts.Broker.Publish(topic, &broker.Message{
-		Header: md,
-		Body:   b.Bytes(),
-	})
 }
 
 func (r *rpcClient) NewMessage(topic string, message interface{}, opts ...MessageOption) Message {

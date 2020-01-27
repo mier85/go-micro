@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/micro/go-micro/broker"
 	"github.com/micro/go-micro/codec"
 	"github.com/micro/go-micro/registry"
 	"github.com/micro/go-micro/server/debug"
@@ -14,7 +13,6 @@ import (
 
 type Options struct {
 	Codecs       map[string]codec.NewCodec
-	Broker       broker.Broker
 	Registry     registry.Registry
 	Transport    transport.Transport
 	Metadata     map[string]string
@@ -52,10 +50,6 @@ func newOptions(opt ...Option) Options {
 
 	for _, o := range opt {
 		o(&opts)
-	}
-
-	if opts.Broker == nil {
-		opts.Broker = broker.DefaultBroker
 	}
 
 	if opts.Registry == nil {
@@ -125,13 +119,6 @@ func Address(a string) Option {
 func Advertise(a string) Option {
 	return func(o *Options) {
 		o.Advertise = a
-	}
-}
-
-// Broker to use for pub/sub
-func Broker(b broker.Broker) Option {
-	return func(o *Options) {
-		o.Broker = b
 	}
 }
 
